@@ -1,0 +1,12 @@
+torch
+transformers>=4.44.2
+gradio>=4.44.0
+accelerate
+python-docx
+diffusers
+torchvision
+pillow
+controlnet-aux
+sentence-transformers
+tqdm
+requests
