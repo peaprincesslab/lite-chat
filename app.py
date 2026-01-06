@@ -226,7 +226,7 @@ def generate_image_caption(image, max_length=100):
     except Exception as e:
         return None, f"图像描述生成失败: {str(e)}"
 
-def rewrite_caption_with_prompt(caption, rewrite_prompt):
+def rewrite_caption_with_prompt(caption, rewrite_prompt, system_prompt=None):
     """使用提示词改写图像描述"""
     global model, tokenizer
     
@@ -240,8 +240,9 @@ def rewrite_caption_with_prompt(caption, rewrite_prompt):
             return None, f"模型加载失败: {str(e)}\n请检查模型路径是否正确，或使用 download_models.py 下载模型。"
     
     try:
-        # 构建改写提示
-        system_prompt = "你是一个专业的图像描述改写助手。请根据用户的要求改写图像描述，保持描述的准确性和流畅性。"
+        # 构建改写提示，使用用户提供的系统提示词或默认值
+        if not system_prompt or not system_prompt.strip():
+            system_prompt = "你是一个专业的图像描述改写助手。请根据用户的要求改写图像描述，保持描述的准确性和流畅性。"
         user_prompt = f"原始图像描述：{caption}\n\n改写要求：{rewrite_prompt}\n\n请提供改写后的图像描述："
         
         # 构建对话
@@ -286,7 +287,7 @@ DEFAULT_TOP_P = 0.9        # Top-p (nucleus sampling) 范围在0到1之间
 DEFAULT_TOP_K = 80         # Top-k 采样的K值
 DEFAULT_TEMPERATURE = 0.3  # 温度参数，控制生成文本的随机性
 DEFAULT_REPETITION_PENALTY = 1.1  # 重复惩罚参数
-DEFAULT_SYSTEM_MESSAGE = ""  # 默认系统消息
+DEFAULT_SYSTEM_MESSAGE = ""  # 默认系统提示词
 
 # 图像生成相关配置
 DEFAULT_IMAGE_SIZE = (512, 512)
@@ -348,12 +349,12 @@ def _chat_stream(model, tokenizer, query, history, system_message, top_p, top_k,
         yield "图生文功能需要在图像生成界面中使用。请切换到'图像生成'标签页，然后选择'图生文'子标签页，上传图像即可生成描述，还可以使用提示词改写描述。"
         return
     
-    # 如果有文件上下文，将其添加到系统消息中
+    # 如果有文件上下文，将其添加到系统提示词中
     enhanced_system_message = system_message
     if file_context:
         enhanced_system_message = f"{system_message}\n\n{file_context}" if system_message else file_context
     
-    # 添加图像生成功能说明到系统消息
+    # 添加图像生成功能说明到系统提示词
     image_help = "\n\n注意：您可以使用以下命令生成图像：\n- /画图 [描述] - 生成图像\n- /generate_image [描述] - 生成图像\n- /生成图像 [描述] - 生成图像\n\n图生图功能：\n- /图生图 - 查看图生图使用说明\n- /img2img - 查看图生图使用说明\n- /基于图像生成 - 查看图生图使用说明\n\n图生文功能：\n- /图生文 - 查看图生文使用说明\n- /img2text - 查看图生文使用说明\n- /图像描述 - 查看图生文使用说明\n- /描述图像 - 查看图生文使用说明"
     enhanced_system_message = enhanced_system_message + image_help
     
@@ -506,15 +507,20 @@ def handle_file_upload(file):
         error_msg = f"处理文件时出错: {str(e)}"
         return error_msg, ""  # 返回错误信息和空的文件上下文
 
-def handle_image_generation(prompt, negative_prompt, width, height, num_steps, guidance):
+def handle_image_generation(prompt, negative_prompt, system_prompt, width, height, num_steps, guidance):
     """处理图像生成"""
     if not prompt.strip():
         return None, "请输入图像描述"
     
     try:
+        # 如果有系统提示词，将其合并到 prompt 中
+        final_prompt = prompt
+        if system_prompt and system_prompt.strip():
+            final_prompt = f"{system_prompt.strip()}\n{prompt}"
+        
         # 生成图像
         image, error = generate_image(
-            prompt=prompt,
+            prompt=final_prompt,
             negative_prompt=negative_prompt,
             num_inference_steps=num_steps,
             guidance_scale=guidance,
@@ -551,7 +557,7 @@ def save_generated_image(image):
     except Exception as e:
         return f"保存图像失败: {str(e)}"
 
-def handle_img2img_generation(prompt, init_image, negative_prompt, num_steps, guidance, strength, width, height):
+def handle_img2img_generation(prompt, init_image, negative_prompt, system_prompt, num_steps, guidance, strength, width, height):
     """处理图生图生成"""
     if not prompt.strip():
         return None, "请输入图像描述"
@@ -560,6 +566,11 @@ def handle_img2img_generation(prompt, init_image, negative_prompt, num_steps, gu
         return None, "请上传参考图像"
     
     try:
+        # 如果有系统提示词，将其合并到 prompt 中
+        final_prompt = prompt
+        if system_prompt and system_prompt.strip():
+            final_prompt = f"{system_prompt.strip()}\n{prompt}"
+        
         # 预处理输入图像
         processed_image = preprocess_image(init_image)
         if processed_image is None:
@@ -567,7 +578,7 @@ def handle_img2img_generation(prompt, init_image, negative_prompt, num_steps, gu
         
         # 生成图像
         image, error = generate_img2img(
-            prompt=prompt,
+            prompt=final_prompt,
             init_image=processed_image,
             negative_prompt=negative_prompt,
             num_inference_steps=num_steps,
@@ -599,7 +610,7 @@ def handle_image_caption_generation(image, max_length):
     except Exception as e:
         return "", f"图像描述生成失败: {str(e)}"
 
-def handle_caption_rewrite(caption, rewrite_prompt):
+def handle_caption_rewrite(caption, rewrite_prompt, system_prompt):
     """处理图像描述改写"""
     if not caption.strip():
         return "", "请先生成图像描述"
@@ -609,7 +620,7 @@ def handle_caption_rewrite(caption, rewrite_prompt):
     
     try:
         # 使用主模型改写描述
-        rewritten_caption, error = rewrite_caption_with_prompt(caption, rewrite_prompt)
+        rewritten_caption, error = rewrite_caption_with_prompt(caption, rewrite_prompt, system_prompt)
         if error:
             return "", error
         
@@ -637,7 +648,7 @@ with gr.Blocks() as demo:
     </style>
     """)
 
-    gr.Markdown("# Qwen2.5 Sex")
+    gr.Markdown("# Lite Chat")
 
     # 创建标签页
     with gr.Tabs() as tabs:
@@ -668,7 +679,7 @@ with gr.Blocks() as demo:
                     # 用户输入区域
                     user_input = gr.Textbox(
                         show_label=False, 
-                        placeholder="输入你的问题...", 
+                        placeholder="输入对话内容...", 
                         lines=2,
                         interactive=True
                     )
@@ -678,12 +689,12 @@ with gr.Blocks() as demo:
                 with gr.Column(scale=1):
                     gr.Markdown("### 对话设置")
                     
-                    # 系统消息
-                    gr.Markdown("#### 系统消息")
+                    # 系统提示词
+                    gr.Markdown("#### 系统提示词")
                     system_message = gr.Textbox(
-                        label="系统消息",
+                        label="系统提示词",
                         value=DEFAULT_SYSTEM_MESSAGE,
-                        placeholder="输入系统消息...",
+                        placeholder="输入系统提示词（用于设定AI的角色和行为）...",
                         lines=3
                     )
                     
@@ -691,7 +702,7 @@ with gr.Blocks() as demo:
                     gr.Markdown("#### 生成参数")
                     top_p_slider = gr.Slider(
                         minimum=0.1, maximum=1.0, value=DEFAULT_TOP_P, step=0.05,
-                        label="Top-p (nucleus sampling)",
+                        label="Top-p (核采样)",
                         info="控制词汇选择的随机性"
                     )
                     top_k_slider = gr.Slider(
@@ -701,17 +712,17 @@ with gr.Blocks() as demo:
                     )
                     temperature_slider = gr.Slider(
                         minimum=0.1, maximum=1.5, value=DEFAULT_TEMPERATURE, step=0.05,
-                        label="Temperature",
+                        label="温度 (Temperature)",
                         info="控制生成的随机性"
                     )
                     max_new_tokens_slider = gr.Slider(
                         minimum=50, maximum=16384, value=DEFAULT_MAX_NEW_TOKENS, step=2,
-                        label="Max New Tokens",
+                        label="最大新令牌数 (Max New Tokens)",
                         info="控制生成长度"
                     )
                     repetition_penalty_slider = gr.Slider(
                         minimum=1.01, maximum=1.5, value=DEFAULT_REPETITION_PENALTY, step=0.01,
-                        label="Repetition Penalty",
+                        label="重复惩罚 (Repetition Penalty)",
                         info="控制重复程度"
                     )
                     
@@ -762,21 +773,37 @@ with gr.Blocks() as demo:
                         # 右侧：参数设置
                         with gr.Column(scale=1):
                             gr.Markdown("### 文生图参数")
+                            
+                            # 系统提示词
+                            gr.Markdown("#### 系统提示词")
+                            image_system_prompt = gr.Textbox(
+                                label="系统提示词",
+                                value="",
+                                placeholder="输入系统提示词（用于设定生成风格或约束）...",
+                                lines=3
+                            )
+                            
+                            # 生成参数
+                            gr.Markdown("#### 生成参数")
                             image_width = gr.Slider(
                                 minimum=256, maximum=1024, value=512, step=64,
-                                label="图像宽度"
+                                label="图像宽度",
+                                info="生成图像的宽度（像素），建议使用512或768"
                             )
                             image_height = gr.Slider(
                                 minimum=256, maximum=1024, value=512, step=64,
-                                label="图像高度"
+                                label="图像高度",
+                                info="生成图像的高度（像素），建议使用512或768"
                             )
                             num_inference_steps = gr.Slider(
                                 minimum=10, maximum=50, value=DEFAULT_NUM_INFERENCE_STEPS, step=1,
-                                label="推理步数"
+                                label="推理步数",
+                                info="生成图像的迭代步数，步数越多质量越好但速度越慢，建议20-50"
                             )
                             guidance_scale = gr.Slider(
                                 minimum=1.0, maximum=20.0, value=DEFAULT_GUIDANCE_SCALE, step=0.5,
-                                label="引导强度"
+                                label="引导强度",
+                                info="控制提示词对生成结果的影响程度，值越高越遵循提示词，建议7-12"
                             )
                             save_image_btn = gr.Button("保存图像")
                 
@@ -809,15 +836,26 @@ with gr.Blocks() as demo:
                         with gr.Column(scale=1):
                             gr.Markdown("### 图生图参数")
                             
+                            # 系统提示词
+                            gr.Markdown("#### 系统提示词")
+                            img2img_system_prompt = gr.Textbox(
+                                label="系统提示词",
+                                value="",
+                                placeholder="输入系统提示词（用于设定生成风格或约束）...",
+                                lines=3
+                            )
+                            
                             # 分辨率设置
                             gr.Markdown("#### 分辨率设置")
                             img2img_width = gr.Slider(
                                 minimum=256, maximum=1024, value=512, step=64,
-                                label="图像宽度"
+                                label="图像宽度",
+                                info="生成图像的宽度（像素），建议使用512或768"
                             )
                             img2img_height = gr.Slider(
                                 minimum=256, maximum=1024, value=512, step=64,
-                                label="图像高度"
+                                label="图像高度",
+                                info="生成图像的高度（像素），建议使用512或768"
                             )
                             
                             # 生成参数
@@ -825,17 +863,17 @@ with gr.Blocks() as demo:
                             img2img_num_inference_steps = gr.Slider(
                                 minimum=10, maximum=100, value=50, step=1,
                                 label="推理步数",
-                                info="步数越多质量越好，但耗时更长"
+                                info="生成图像的迭代步数，步数越多质量越好但速度越慢，建议20-50"
                             )
                             img2img_guidance_scale = gr.Slider(
                                 minimum=1.0, maximum=20.0, value=7.5, step=0.5,
                                 label="引导强度",
-                                info="控制提示词的影响程度"
+                                info="控制提示词对生成结果的影响程度，值越高越遵循提示词，建议7-12"
                             )
                             img2img_strength = gr.Slider(
                                 minimum=0.1, maximum=1.0, value=0.6, step=0.05,
                                 label="变化强度",
-                                info="值越高变化越大，值越低保留原图越多"
+                                info="控制生成图像与原图的相似度，值越高变化越大，值越低保留原图特征越多，建议0.5-0.8"
                             )
                             
                             # 使用说明
@@ -894,9 +932,22 @@ with gr.Blocks() as demo:
                         # 右侧：图生文参数设置
                         with gr.Column(scale=1):
                             gr.Markdown("### 图生文参数")
+                            
+                            # 系统提示词
+                            gr.Markdown("#### 系统提示词")
+                            caption_system_prompt = gr.Textbox(
+                                label="系统提示词",
+                                value="你是一个专业的图像描述改写助手。请根据用户的要求改写图像描述，保持描述的准确性和流畅性。",
+                                placeholder="输入系统提示词（用于设定改写风格）...",
+                                lines=3
+                            )
+                            
+                            # 生成参数
+                            gr.Markdown("#### 生成参数")
                             max_caption_length = gr.Slider(
                                 minimum=20, maximum=200, value=DEFAULT_MAX_CAPTION_LENGTH, step=10,
-                                label="最大描述长度"
+                                label="最大描述长度",
+                                info="控制生成图像描述的最大长度（字符数），值越大描述越详细，建议50-100"
                             )
                             gr.Markdown("### 使用说明")
                             gr.HTML("""
@@ -958,7 +1009,7 @@ with gr.Blocks() as demo:
     # 图像生成事件绑定
     generate_btn.click(
         handle_image_generation,
-        inputs=[image_prompt, negative_prompt, image_width, image_height, num_inference_steps, guidance_scale],
+        inputs=[image_prompt, negative_prompt, image_system_prompt, image_width, image_height, num_inference_steps, guidance_scale],
         outputs=[generated_image, gr.Textbox(label="状态", visible=False)],
         queue=True
     )
@@ -973,7 +1024,7 @@ with gr.Blocks() as demo:
     # 图生图事件绑定
     generate_img2img_btn.click(
         handle_img2img_generation,
-        inputs=[img2img_prompt, init_image_upload, img2img_negative_prompt, img2img_num_inference_steps, img2img_guidance_scale, img2img_strength, img2img_width, img2img_height],
+        inputs=[img2img_prompt, init_image_upload, img2img_negative_prompt, img2img_system_prompt, img2img_num_inference_steps, img2img_guidance_scale, img2img_strength, img2img_width, img2img_height],
         outputs=[img2img_generated_image, gr.Textbox(label="状态", visible=False)],
         queue=True
     )
@@ -995,7 +1046,7 @@ with gr.Blocks() as demo:
     
     rewrite_caption_btn.click(
         handle_caption_rewrite,
-        inputs=[generated_caption, rewrite_prompt],
+        inputs=[generated_caption, rewrite_prompt, caption_system_prompt],
         outputs=[rewritten_caption, gr.Textbox(label="状态", visible=False)],
         queue=True
     )
@@ -1015,6 +1066,68 @@ with gr.Blocks() as demo:
         if(chatContainer) {
             observer.observe(chatContainer, { childList: true, subtree: true });
         }
+        
+        // 中文化图像上传提示文本
+        function translateImageUploadText() {
+            const uploadTexts = document.querySelectorAll('.wrap.svelte-12ioyct, .upload-container .wrap, div[data-testid="image"] .wrap');
+            uploadTexts.forEach(element => {
+                // 直接设置中文文本，避免多次replace
+                if (element.textContent && (
+                    element.textContent.includes('Drop Image Here') || 
+                    element.textContent.includes('Click to Upload')
+                )) {
+                    element.textContent = '拖放图像到此处 - 或 - 点击上传';
+                }
+            });
+        }
+        
+        // 页面加载后执行
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', translateImageUploadText);
+        } else {
+            translateImageUploadText();
+        }
+        
+        // 监听DOM变化，处理动态加载的组件
+        const imageObserver = new MutationObserver(() => {
+            translateImageUploadText();
+        });
+        
+        imageObserver.observe(document.body, {
+            childList: true,
+            subtree: true
+        });
+        
+        // 定期检查（处理延迟加载的组件）
+        setInterval(translateImageUploadText, 1000);
+        
+        // 修改 Chatbot 占位符文本
+        function updateChatbotPlaceholder() {
+            const placeholderContent = document.querySelector('#chat-container .placeholder-content');
+            if (placeholderContent && !placeholderContent.textContent.trim()) {
+                placeholderContent.textContent = 'AI 输出将显示在这里...';
+            }
+        }
+        
+        // 页面加载后执行
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', updateChatbotPlaceholder);
+        } else {
+            updateChatbotPlaceholder();
+        }
+        
+        // 监听DOM变化，处理动态加载的组件
+        const chatbotObserver = new MutationObserver(() => {
+            updateChatbotPlaceholder();
+        });
+        
+        chatbotObserver.observe(document.body, {
+            childList: true,
+            subtree: true
+        });
+        
+        // 定期检查（处理延迟加载的组件）
+        setInterval(updateChatbotPlaceholder, 1000);
     </script>
     """)
 
@@ -1025,6 +1138,6 @@ generate_image_caption.processor = None
 generate_image_caption.model = None
 
 print("\n" + "="*50)
-print("正在启动 WebUI 服务...")
+print("正在启动 Lite Chat 服务...")
 print("="*50 + "\n")
 demo.launch(server_name="0.0.0.0", server_port=7860, share=False)

@@ -10,3 +10,4 @@ controlnet-aux
 sentence-transformers
 tqdm
 requests
+PyPDF2

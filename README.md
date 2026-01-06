@@ -1,6 +1,6 @@
 # Lite Chat
 
-一个轻量的多模态AI对话应用，支持文本对话、图像生成、图生图和图生文功能。
+一个轻量的多模态AI对话应用，支持文本对话、文生图、图生图和图生文功能。
 
 ## ✨ 功能特性
 
@@ -11,6 +11,11 @@
 - 📄 **文件处理**：支持上传多种格式文件（TXT、MD、PDF、DOCX等）进行内容分析
 - ⚡ **懒加载**：模型按需加载，节省内存和启动时间
 - 🚀 **本地部署**：完全本地运行，保护隐私
+
+## 对话效果
+
+![Lite Chat 对话效果](doc/lite-chat-对话效果.jpg)
+
 
 ## 📋 系统要求
 
@@ -40,10 +45,10 @@ python download_models.py
 - **BLIP** (约 1GB) - 图生文
 - **Qwen3-4B-Instruct** (约 8GB) - 对话模型
 
-### 3. 启动 Web UI
+### 3. 启动服务
 
 ```bash
-python run_webui.py
+python app.py
 ```
 
 启动后，在浏览器中访问 `http://localhost:7860`
@@ -52,7 +57,7 @@ python run_webui.py
 
 ```
 lite-chat/
-├── run_webui.py          # Web UI 主程序
+├── app.py                # 主程序
 ├── load_models.py        # 模型加载模块（懒加载）
 ├── download_models.py    # 模型下载脚本
 ├── requirements.txt      # Python 依赖
@@ -60,7 +65,6 @@ lite-chat/
 │   ├── Qwen3-4B-Instruct/
 │   ├── stable-diffusion-v1-5-img2img/
 │   └── blip-image-captioning-base/
-└── doc/                  # 文档目录
 ```
 
 ## 🎯 使用说明
@@ -114,6 +118,9 @@ lite-chat/
 - 节省内存（只加载需要的模型）
 - 按需使用资源
 
+## 模型下载说明
+[模型下载说明](./doc/模型下载说明.md)
+
 ## 🔧 高级配置
 
 ### 修改模型路径
@@ -135,15 +142,8 @@ OFFLINE_MODE = True  # 是否只使用本地模型
 
 ### 修改服务器端口
 
-编辑 `run_webui.py` 末尾：
+编辑 `app.py` 末尾：
 
 ```python
 demo.launch(server_name="0.0.0.0", server_port=7860, share=False)
 ```
-
-## 参考
-
-- [Qwen](https://github.com/QwenLM/Qwen) - 对话模型
-- [Stable Diffusion](https://github.com/Stability-AI/stablediffusion) - 图像生成模型
-- [BLIP](https://github.com/salesforce/BLIP) - 图像描述模型
-- [Gradio](https://github.com/gradio-app/gradio) - Web UI 框架

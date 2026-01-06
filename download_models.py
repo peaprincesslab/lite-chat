@@ -12,6 +12,53 @@ from transformers import AutoTokenizer, AutoModel
 from tqdm import tqdm
 import requests
 
+# ==================== 模型配置常量 ====================
+# 本地模型存储目录
+LOCAL_MODELS_DIR = "./models"
+
+# Stable Diffusion 模型配置
+SD_MODEL_NAME = "radames/stable-diffusion-v1-5-img2img"
+SD_LOCAL_DIR_NAME = "stable-diffusion-v1-5-img2img"
+
+# BLIP 模型配置
+BLIP_MODEL_NAME = "Salesforce/blip-image-captioning-base"
+BLIP_LOCAL_DIR_NAME = "blip-image-captioning-base"
+BLIP_FILES = [
+    "config.json",
+    "pytorch_model.bin",
+    "tokenizer.json",
+    "tokenizer_config.json"
+]
+
+# Qwen 对话模型配置
+QWEN_MODEL_NAME = "Qwen/Qwen3-4B-Instruct"
+QWEN_LOCAL_DIR_NAME = "Qwen3-4B-Instruct"
+
+# 镜像站点配置
+MIRROR_SITES = [
+    "https://hf-mirror.com",  # HuggingFace 镜像站
+    "https://huggingface.co",  # 官方站点
+]
+
+# Stable Diffusion 核心文件列表
+SD_CORE_FILES = [
+    "model_index.json",
+    "scheduler/scheduler_config.json",
+    "text_encoder/config.json",
+    "text_encoder/pytorch_model.bin",
+    "tokenizer/tokenizer_config.json",
+    "tokenizer/vocab.json",
+    "tokenizer/merges.txt",
+    "unet/config.json",
+    "unet/diffusion_pytorch_model.bin",
+    "vae/config.json",
+    "vae/diffusion_pytorch_model.bin",
+    "feature_extractor/preprocessor_config.json"
+]
+
+# Stable Diffusion 完整文件列表（核心文件 + safetensors）
+SD_FULL_FILES = SD_CORE_FILES + ["v1-5-pruned-emaonly.safetensors"]
+
 def download_file_with_progress(url, filepath, filename):
     """带进度条的文件下载"""
     try:
@@ -39,15 +86,11 @@ def download_file_with_progress(url, filepath, filename):
 
 def download_stable_diffusion_model():
     """下载Stable Diffusion模型"""
-    # 使用可用的镜像模型
-    model_name = "radames/stable-diffusion-v1-5-img2img"
-    local_models_dir = "./models"
-    
     # 创建models目录
-    os.makedirs(local_models_dir, exist_ok=True)
+    os.makedirs(LOCAL_MODELS_DIR, exist_ok=True)
     
-    print(f"正在下载模型: {model_name}")
-    print(f"下载到目录: {local_models_dir}")
+    print(f"正在下载模型: {SD_MODEL_NAME}")
+    print(f"下载到目录: {LOCAL_MODELS_DIR}")
     
     # 询问用户选择下载版本
     print("\n选择要下载的模型版本:")
@@ -60,40 +103,13 @@ def download_stable_diffusion_model():
         
         if choice == "1":
             # 只下载核心diffusers文件
-            files_to_download = [
-                "model_index.json",
-                "scheduler/scheduler_config.json",
-                "text_encoder/config.json",
-                "text_encoder/pytorch_model.bin",
-                "tokenizer/tokenizer_config.json",
-                "tokenizer/vocab.json",
-                "tokenizer/merges.txt",
-                "unet/config.json",
-                "unet/diffusion_pytorch_model.bin",
-                "vae/config.json",
-                "vae/diffusion_pytorch_model.bin",
-                "feature_extractor/preprocessor_config.json"
-            ]
+            files_to_download = SD_CORE_FILES.copy()
             print("将下载核心文件 (约2.2GB)")
             break
             
         elif choice == "2":
             # 核心文件 + safetensors
-            files_to_download = [
-                "model_index.json",
-                "scheduler/scheduler_config.json",
-                "text_encoder/config.json",
-                "text_encoder/pytorch_model.bin",
-                "tokenizer/tokenizer_config.json",
-                "tokenizer/vocab.json",
-                "tokenizer/merges.txt",
-                "unet/config.json",
-                "unet/diffusion_pytorch_model.bin",
-                "vae/config.json",
-                "vae/diffusion_pytorch_model.bin",
-                "feature_extractor/preprocessor_config.json",
-                "v1-5-pruned-emaonly.safetensors"
-            ]
+            files_to_download = SD_FULL_FILES.copy()
             print("将下载核心文件 + safetensors (约6.5GB)")
             break
             
@@ -108,13 +124,7 @@ def download_stable_diffusion_model():
     
     print("这可能需要一些时间，请耐心等待...")
     
-    # 设置镜像站点
-    mirror_sites = [
-        "https://hf-mirror.com",  # HuggingFace 镜像站
-        "https://huggingface.co",  # 官方站点
-    ]
-    
-    for mirror in mirror_sites:
+    for mirror in MIRROR_SITES:
         try:
             print(f"尝试使用镜像站点: {mirror}")
             
@@ -124,33 +134,22 @@ def download_stable_diffusion_model():
             if files_to_download is None:
                 # 下载整个仓库
                 cache_dir = snapshot_download(
-                    repo_id=model_name,
-                    cache_dir=local_models_dir,
+                    repo_id=SD_MODEL_NAME,
+                    cache_dir=LOCAL_MODELS_DIR,
                     local_files_only=False,
                     resume_download=True
                 )
             else:
                 # 只下载指定文件
-                model_path = os.path.join(local_models_dir, "stable-diffusion-v1-5-img2img")
+                model_path = os.path.join(LOCAL_MODELS_DIR, SD_LOCAL_DIR_NAME)
                 os.makedirs(model_path, exist_ok=True)
                 
                 print(f"开始下载 {len(files_to_download)} 个文件...")
                 
                 # 文件下载URL映射
                 file_urls = {
-                    "model_index.json": f"{mirror}/{model_name}/resolve/main/model_index.json",
-                    "scheduler/scheduler_config.json": f"{mirror}/{model_name}/resolve/main/scheduler/scheduler_config.json",
-                    "text_encoder/config.json": f"{mirror}/{model_name}/resolve/main/text_encoder/config.json",
-                    "text_encoder/pytorch_model.bin": f"{mirror}/{model_name}/resolve/main/text_encoder/pytorch_model.bin",
-                    "tokenizer/tokenizer_config.json": f"{mirror}/{model_name}/resolve/main/tokenizer/tokenizer_config.json",
-                    "tokenizer/vocab.json": f"{mirror}/{model_name}/resolve/main/tokenizer/vocab.json",
-                    "tokenizer/merges.txt": f"{mirror}/{model_name}/resolve/main/tokenizer/merges.txt",
-                    "unet/config.json": f"{mirror}/{model_name}/resolve/main/unet/config.json",
-                    "unet/diffusion_pytorch_model.bin": f"{mirror}/{model_name}/resolve/main/unet/diffusion_pytorch_model.bin",
-                    "vae/config.json": f"{mirror}/{model_name}/resolve/main/vae/config.json",
-                    "vae/diffusion_pytorch_model.bin": f"{mirror}/{model_name}/resolve/main/vae/diffusion_pytorch_model.bin",
-                    "feature_extractor/preprocessor_config.json": f"{mirror}/{model_name}/resolve/main/feature_extractor/preprocessor_config.json",
-                    "v1-5-pruned-emaonly.safetensors": f"{mirror}/{model_name}/resolve/main/v1-5-pruned-emaonly.safetensors"
+                    file_path: f"{mirror}/{SD_MODEL_NAME}/resolve/main/{file_path}"
+                    for file_path in files_to_download
                 }
                 
                 success_count = 0
@@ -194,48 +193,29 @@ def download_stable_diffusion_model():
 
 def download_blip_model():
     """下载BLIP模型（用于图生文）"""
-    model_name = "Salesforce/blip-image-captioning-base"
-    local_models_dir = "./models"
-    
     # 创建models目录
-    os.makedirs(local_models_dir, exist_ok=True)
+    os.makedirs(LOCAL_MODELS_DIR, exist_ok=True)
     
-    print(f"正在下载BLIP模型: {model_name}")
-    print(f"下载到目录: {local_models_dir}")
+    print(f"正在下载BLIP模型: {BLIP_MODEL_NAME}")
+    print(f"下载到目录: {LOCAL_MODELS_DIR}")
     
-    # BLIP模型文件列表
-    blip_files = [
-        "config.json",
-        "pytorch_model.bin",
-        "tokenizer.json",
-        "tokenizer_config.json"
-    ]
-    
-    # 设置镜像站点
-    mirror_sites = [
-        "https://hf-mirror.com",  # HuggingFace 镜像站
-        "https://huggingface.co",  # 官方站点
-    ]
-    
-    for mirror in mirror_sites:
+    for mirror in MIRROR_SITES:
         try:
             print(f"尝试使用镜像站点: {mirror}")
             
-            model_path = os.path.join(local_models_dir, "blip-image-captioning-base")
+            model_path = os.path.join(LOCAL_MODELS_DIR, BLIP_LOCAL_DIR_NAME)
             os.makedirs(model_path, exist_ok=True)
             
-            print(f"开始下载 {len(blip_files)} 个BLIP文件...")
+            print(f"开始下载 {len(BLIP_FILES)} 个BLIP文件...")
             
             # 文件下载URL映射
             file_urls = {
-                "config.json": f"{mirror}/{model_name}/resolve/main/config.json",
-                "pytorch_model.bin": f"{mirror}/{model_name}/resolve/main/pytorch_model.bin",
-                "tokenizer.json": f"{mirror}/{model_name}/resolve/main/tokenizer.json",
-                "tokenizer_config.json": f"{mirror}/{model_name}/resolve/main/tokenizer_config.json"
+                file_path: f"{mirror}/{BLIP_MODEL_NAME}/resolve/main/{file_path}"
+                for file_path in BLIP_FILES
             }
             
             success_count = 0
-            for file_path in blip_files:
+            for file_path in BLIP_FILES:
                 if file_path in file_urls:
                     file_full_path = os.path.join(model_path, file_path)
                     url = file_urls[file_path]
@@ -249,13 +229,13 @@ def download_blip_model():
                 else:
                     print(f"⚠️  未找到 {file_path} 的下载链接")
             
-            if success_count == len(blip_files):
-                print(f"\n🎉 BLIP模型下载完成！({success_count}/{len(blip_files)})")
+            if success_count == len(BLIP_FILES):
+                print(f"\n🎉 BLIP模型下载完成！({success_count}/{len(BLIP_FILES)})")
                 print(f"使用镜像: {mirror}")
                 print(f"本地目录: {model_path}")
                 return True
             else:
-                print(f"\n⚠️  BLIP模型部分文件下载失败 ({success_count}/{len(blip_files)})")
+                print(f"\n⚠️  BLIP模型部分文件下载失败 ({success_count}/{len(BLIP_FILES)})")
                 continue
             
         except Exception as e:
@@ -267,26 +247,14 @@ def download_blip_model():
 
 def download_qwen_model():
     """下载Qwen对话模型（Qwen3-4B-Instruct）"""
-    local_models_dir = "./models"
-    
     # 创建models目录
-    os.makedirs(local_models_dir, exist_ok=True)
+    os.makedirs(LOCAL_MODELS_DIR, exist_ok=True)
     
-    # Qwen3-4B-Instruct 模型配置
-    model_name = "Qwen/Qwen3-4B-Instruct"
-    local_model_name = "Qwen3-4B-Instruct"
-    
-    print(f"\n正在下载模型: {model_name}")
-    print(f"下载到目录: {local_models_dir}")
+    print(f"\n正在下载模型: {QWEN_MODEL_NAME}")
+    print(f"下载到目录: {LOCAL_MODELS_DIR}")
     print("这可能需要一些时间，请耐心等待...")
     
-    # 设置镜像站点
-    mirror_sites = [
-        "https://hf-mirror.com",  # HuggingFace 镜像站
-        "https://huggingface.co",  # 官方站点
-    ]
-    
-    for mirror in mirror_sites:
+    for mirror in MIRROR_SITES:
         try:
             print(f"\n尝试使用镜像站点: {mirror}")
             
@@ -294,13 +262,13 @@ def download_qwen_model():
             os.environ['HF_ENDPOINT'] = mirror
             
             # 使用snapshot_download下载整个模型仓库
-            model_path = os.path.join(local_models_dir, local_model_name)
+            model_path = os.path.join(LOCAL_MODELS_DIR, QWEN_LOCAL_DIR_NAME)
             
             print("开始下载模型文件...")
             print("注意：模型文件较大，下载可能需要较长时间")
             
             cache_dir = snapshot_download(
-                repo_id=model_name,
+                repo_id=QWEN_MODEL_NAME,
                 cache_dir=model_path,
                 local_files_only=False,
                 resume_download=True
@@ -330,13 +298,8 @@ def main():
     print("=" * 50)
     
     # 检查网络连接（使用镜像站点）
-    mirror_sites = [
-        "https://hf-mirror.com",
-        "https://huggingface.co"
-    ]
-    
     network_ok = False
-    for mirror in mirror_sites:
+    for mirror in MIRROR_SITES:
         try:
             import requests
             response = requests.get(mirror, timeout=10)
